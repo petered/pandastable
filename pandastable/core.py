@@ -35,19 +35,12 @@ except:
     import tkSimpleDialog as simpledialog
     import tkMessageBox as messagebox
 from tkinter import font
-import math, time
-import os, types
-import string, copy
-import platform
+import string
 import logging
-import numpy as np
-import pandas as pd
-from .data import TableModel
-from .headers import ColumnHeader, RowHeader, IndexHeader
-from .plotting import MPLBaseOptions, PlotViewer
+from .headers import ColumnHeader, RowHeader, IndexHeader, MockTkObject
+from .plotting import PlotViewer
 # from .prefs import Preferences
-from .dialogs import ImportDialog
-from . import images, util, config
+from . import config
 from .dialogs import *
 
 themes = {'dark': {'cellbackgr': 'gray25', 'grid_color': 'gray50', 'textcolor': '#f2eeeb',
@@ -79,23 +72,27 @@ class Table(Canvas):
         showstatusbar: whether to show the statusbar
     """
 
-    def __init__(self,
-                 parent=None,
-                 model=None,
-                 dataframe: Optional[pd.DataFrame]=None,
-                 width=None,
-                 height=None,
-                 rows=20,
-                 cols=5,
-                 showtoolbar=False,
-                 showstatusbar=False,
-                 on_edit_callback: Optional[Callable[[int, int, pd.DataFrame], None]] = None,
-                 editable=True,
-                 editable_columns: Optional[Sequence[Union[int, str]]] = None,
-                 on_select_callback: Optional[Callable[[int, int, pd.DataFrame], None]] = None,
-                 # Called whenever a new row/col is selected.  Note, to get multiselect indices, you'd call
-                 enable_menus=True,
-                 **kwargs):
+    def     __init__(self,
+                     parent=None,
+                     model=None,
+                     dataframe: Optional[pd.DataFrame]=None,
+                     width=None,
+                     height=None,
+                     rows=20,
+                     cols=5,
+                     column_width_fudge_factor: float = 1.0,
+                     showtoolbar=False,
+                     showstatusbar=False,
+                     show_row_headers = True,
+                     show_col_headers = True,
+                     bind_keys: Optional[bool] = True,  # Bind the keyboard to actions in the table (like arrows to scroll, ..._)
+                     on_edit_callback: Optional[Callable[[int, int, pd.DataFrame], None]] = None,
+                     editable=True,
+                     editable_columns: Optional[Sequence[Union[int, str]]] = None,
+                     on_select_callback: Optional[Callable[[int, int, pd.DataFrame], None]] = None,
+                     # Called whenever a new row/col is selected.  Note, to get multiselect indices, you'd call
+                     enable_menus=True,
+                     **kwargs):
 
         Canvas.__init__(self, parent, bg='white',
                         width=width, height=height,
@@ -105,6 +102,8 @@ class Table(Canvas):
         # get platform into a variable
         self.ostyp = util.checkOS()
         self.platform = platform.system()
+        self._column_width_fudge_factor = column_width_fudge_factor
+        # self._show_index_bar = show_index_bar
         self.width = width
         self.height = height
         self.filename = None
@@ -120,6 +119,7 @@ class Table(Canvas):
         self.reverseorder = 0
         self.startrow = self.endrow = None
         self.startcol = self.endcol = None
+        self.bind_keys = bind_keys
         self.allrows = False
         self.multiplerowlist = []
         self.multiplecollist = []
@@ -137,6 +137,9 @@ class Table(Canvas):
         self.currentdir = os.path.expanduser('~')
         self.loadPrefs()
         self.setFont()
+        self._show_row_headers = show_row_headers
+        self._show_col_headers = show_col_headers
+
         # set any options passed in kwargs to overwrite defaults and prefs
         for key in kwargs:
             self.__dict__[key] = kwargs[key]
@@ -162,7 +165,7 @@ class Table(Canvas):
         self.plotted = False
         self.importpath = None
         self.prevdf = None
-        return
+
 
     def close(self, evt=None):
         if hasattr(self, 'parenttable'):
@@ -272,22 +275,24 @@ class Table(Canvas):
         self.bind("<Control-c>", self.copy)
         # self.bind("<Control-x>", self.deleteRow)
         self.bind("<Delete>", self.clearData)
-        self.bind("<Control-v>", self.paste)
-        self.bind("<Control-z>", self.undo)
-        self.bind("<Control-a>", self.selectAll)
-        self.bind("<Control-f>", self.findText)
 
-        self.bind("<Right>", self.handle_arrow_keys)
-        self.bind("<Left>", self.handle_arrow_keys)
-        self.bind("<Up>", self.handle_arrow_keys)
-        self.bind("<Down>", self.handle_arrow_keys)
-        self.parentframe.master.bind_all("<KP_8>", self.handle_arrow_keys)
-        self.parentframe.master.bind_all("<Return>", self.handle_arrow_keys)
-        self.parentframe.master.bind_all("<Tab>", self.handle_arrow_keys)
-        # if 'windows' in self.platform:
         self.bind("<MouseWheel>", self.mouse_wheel)
-        self.bind('<Button-4>', self.mouse_wheel)
-        self.bind('<Button-5>', self.mouse_wheel)
+        if self.bind_keys:
+            self.bind("<Control-v>", self.paste)
+            self.bind("<Control-z>", self.undo)
+            self.bind("<Control-a>", self.selectAll)
+            self.bind("<Control-f>", self.findText)
+
+            self.bind("<Right>", self.handle_arrow_keys)
+            self.bind("<Left>", self.handle_arrow_keys)
+            self.bind("<Up>", self.handle_arrow_keys)
+            self.bind("<Down>", self.handle_arrow_keys)
+            self.parentframe.master.bind_all("<KP_8>", self.handle_arrow_keys)
+            self.parentframe.master.bind_all("<Return>", self.handle_arrow_keys)
+            self.parentframe.master.bind_all("<Tab>", self.handle_arrow_keys)
+            # if 'windows' in self.platform:
+            self.bind('<Button-4>', self.mouse_wheel)
+            self.bind('<Button-5>', self.mouse_wheel)
         self.focus_set()
         return
 
@@ -297,9 +302,10 @@ class Table(Canvas):
            Table is then redrawn."""
 
         # Add the table and header to the frame
-        self.rowheader = RowHeader(self.parentframe, self)
-        self.colheader = ColumnHeader(self.parentframe, self, bg='gray25')
-        self.rowindexheader = IndexHeader(self.parentframe, self, bg='gray75')
+        self.rowheader = RowHeader(self.parentframe, self) if self._show_row_headers else MockTkObject()
+        self.colheader = ColumnHeader(self.parentframe, self, bg='gray25') if self._show_col_headers else MockTkObject()
+
+        self.rowindexheader = IndexHeader(self.parentframe, self, bg='gray75') if self._show_row_headers else MockTkObject()
         self.Yscrollbar = AutoScrollbar(self.parentframe, orient=VERTICAL, command=self.set_yviews)
         self.Yscrollbar.grid(row=1, column=2, rowspan=1, sticky='news', pady=0, ipady=0)
         self.Xscrollbar = AutoScrollbar(self.parentframe, orient=HORIZONTAL, command=self.set_xviews)
@@ -813,7 +819,7 @@ class Table(Canvas):
                 tw = self.maxcellwidth
             elif tw < self.cellwidth:
                 tw = self.cellwidth
-            self.columnwidths[colname] = tw
+            self.columnwidths[colname] = tw * self._column_width_fudge_factor
         return
 
     def autoResizeColumns(self):
@@ -2105,7 +2111,8 @@ class Table(Canvas):
         """ Get the indices of the rows/cols currently selected.
         If your table defines an index,
         """
-        rows = self.get_df().index[self.multiplerowlist].values
+        df = self.get_df()
+        rows = df.index[[m for m in self.multiplerowlist if m < len(df)]].values
         return rows, self.multiplecollist
 
     def setSelectedCells(self, startrow, endrow, startcol, endcol):
@@ -2128,6 +2135,10 @@ class Table(Canvas):
     def getSelectedRow(self):
         """Get currently selected row"""
         return self.currentrow
+
+    def get_selected_row_index(self) -> Optional[int]:
+        df = self.get_df()
+        return df.index[self.getSelectedRow()] if len(df)>0 else None
 
     def getSelectedColumn(self):
         """Get currently selected column"""
@@ -3356,14 +3367,29 @@ class Table(Canvas):
 
         return
 
-    def update_df(self, df: Optional[pd.DataFrame] = None, show_now: bool = True):
+    def update_df(self, df: Optional[pd.DataFrame] = None, show_now: Optional[bool] = None):
         """ Update the dataframe
         If you have just edited the dataframe inplace, you don't need to pass it in.
         """
-        if df is not None:
+        change_happened = not df.equals(self.model.df)
+
+        old_df = self.model.df
+        if df is not None and change_happened:
             self.model.df = df
-        if show_now:
-            self.show()
+
+        if show_now or (show_now is None and change_happened):
+            if df.index.equals(old_df.index) and df.columns.equals(old_df.columns):
+                difference_mask = df.to_numpy() != old_df.to_numpy()
+                if difference_mask.sum()==1:
+                    row_ixs, col_ixs = np.nonzero(difference_mask)
+                    for r, c in zip(row_ixs, col_ixs):
+                        self.redrawCell(r, c)
+                else:
+                    self.redraw()
+            else:
+                self.redraw()
+            # self.show()
+            # self.show()  # Why twice?  Who knows but it works
 
     def get_df(self) -> pd.DataFrame:
         return self.model.df

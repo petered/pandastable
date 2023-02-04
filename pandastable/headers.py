@@ -796,6 +796,44 @@ class RowHeader(Canvas):
         self.lift('text')
         return
 
+
+class MockTkObject:
+
+    __name__ = "Mock object"
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def grid(self, *args, **kwargs):
+        pass
+
+    def xview(self, *args):
+        pass
+
+    def redraw(self, *args, **kwargs):
+        pass
+
+    def destroy(self):
+        pass
+
+    def delete(self,  *args):
+        pass
+
+    def drawSelectedRows(self, *args, **kwargs):
+        pass
+
+    @property
+    def rightmenu(self):
+        return MockTkObject()
+
+    def __setitem__(self, key, value):
+        pass
+
+    def __getattr__(self, item):
+        pass
+
+
+
 class IndexHeader(Canvas):
     """Class that displays the row index headings."""
 
