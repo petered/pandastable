@@ -2107,11 +2107,13 @@ class Table(Canvas):
         for r in rows:
             self.multiplerowlist.append(r)
 
-    def get_current_selection(self) -> Tuple[Sequence[Hashable], Sequence[int]]:
+    def get_current_selection(self) -> Optional[Tuple[Sequence[Hashable], Sequence[int]]]:
         """ Get the indices of the rows/cols currently selected.
         If your table defines an index,
         """
         df = self.get_df()
+        if len(df)==0:
+            return None
         rows = df.index[[m for m in self.multiplerowlist if m < len(df)]].values
         return rows, self.multiplecollist
 
@@ -2139,6 +2141,15 @@ class Table(Canvas):
     def get_selected_row_index(self) -> Optional[int]:
         df = self.get_df()
         return df.index[self.getSelectedRow()] if len(df)>0 else None
+
+    def set_selected_row_index(self, index: Hashable):
+        df = self.get_df()
+        if len(df)==0:
+            return
+        new_row = df.index.get_loc(index)
+        self._indicate_selected_rowcol(new_row, self.currentcol)
+        # self.setSelectedRow(df.index.get_loc(index))
+        # self.on_select_callback(self.currentrow, self.currentcol, self.get_df())
 
     def getSelectedColumn(self):
         """Get currently selected column"""
@@ -2285,17 +2296,31 @@ class Table(Canvas):
         self.multiplerowlist = []
         self.multiplerowlist.append(rowclicked)
         if 0 <= rowclicked < self.rows and 0 <= colclicked < self.cols:
-            self.setSelectedRow(rowclicked)
-            self.setSelectedCol(colclicked)
-            self.drawSelectedRect(self.currentrow, self.currentcol)
-            self.drawSelectedRow()
-            self.rowheader.drawSelectedRows(rowclicked)
-            self.colheader.delete('rect')
-            if self.on_select_callback is not None:
-                self.on_select_callback(rowclicked, colclicked, self.get_df())
+            self._indicate_selected_rowcol(rowclicked, colclicked)
+
         if hasattr(self, 'cellentry'):
             self.cellentry.destroy()
         return
+
+    def _indicate_selected_rowcol(self, row, col):
+        self.setSelectedRow(row)
+        self.setSelectedCol(col)
+        self.drawSelectedRect(self.currentrow, self.currentcol)
+        self.drawSelectedRow()
+        self.rowheader.drawSelectedRows(row)
+        self.colheader.delete('rect')
+        if self.on_select_callback is not None:
+            self.on_select_callback(row, col, self.get_df())
+
+    #     """Indicate a cell is selected"""
+    #
+    #     self.drawSelectedRect(row, col)
+    #     self.drawSelectedRow()
+    #     self.rowheader.drawSelectedRows(row)
+    #     self.colheader.delete('rect')
+    #     if self.on_select_callback is not None:
+    #         self.on_select_callback(row, col, self.get_df())
+    #     return`
 
     def handle_left_release(self, event):
         """Handle left mouse button release event"""
@@ -3371,10 +3396,10 @@ class Table(Canvas):
         """ Update the dataframe
         If you have just edited the dataframe inplace, you don't need to pass it in.
         """
-        change_happened = not df.equals(self.model.df)
+        change_happened = df is not None and not df.equals(self.model.df)
 
         old_df = self.model.df
-        if df is not None and change_happened:
+        if change_happened:
             self.model.df = df
 
         if show_now or (show_now is None and change_happened):
