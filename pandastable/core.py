@@ -244,12 +244,14 @@ class Table(Canvas):
 
         if event.num == 5 or event.delta == -120:
             event.widget.yview_scroll(1, UNITS)
-            self.rowheader.yview_scroll(1, UNITS)
+            if self.rowheader is not None:
+                self.rowheader.yview_scroll(1, UNITS)
         if event.num == 4 or event.delta == 120:
             if self.canvasy(0) < 0:
                 return
             event.widget.yview_scroll(-1, UNITS)
-            self.rowheader.yview_scroll(-1, UNITS)
+            if self.rowheader is not None:
+                self.rowheader.yview_scroll(-1, UNITS)
         self.redrawVisible()
         return
 
