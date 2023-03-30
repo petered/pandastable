@@ -252,6 +252,11 @@ class Table(Canvas):
             event.widget.yview_scroll(-1, UNITS)
             if self.rowheader is not None:
                 self.rowheader.yview_scroll(-1, UNITS)
+        if sys.platform == 'darwin':
+            # if self.rowheader is not None and self.rowheader.yview_scroll is not None:
+            #     self.rowheader.yview_scroll(event.delta, UNITS)
+            event.widget.yview_scroll(-event.delta, UNITS)
+
         self.redrawVisible()
         return
 
@@ -1019,7 +1024,8 @@ class Table(Canvas):
         """Set the xview of table and row header"""
 
         self.yview(*args)
-        self.rowheader.yview(*args)
+        if self.rowheader.yview is not None:
+            self.rowheader.yview(*args)
         self.redrawVisible()
         return
 
