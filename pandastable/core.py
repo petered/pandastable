@@ -2144,7 +2144,7 @@ class Table(Canvas):
 
     def getSelectedRow(self):
         """Get currently selected row"""
-        return self.currentrow
+        return min(self.currentrow, len(self.model.df)-1)
 
     def get_selected_row_index(self) -> Optional[int]:
         df = self.get_df()
