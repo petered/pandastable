@@ -3405,8 +3405,9 @@ class Table(Canvas):
         If you have just edited the dataframe inplace, you don't need to pass it in.
         """
         change_happened = df is not None and not df.equals(self.model.df)
-
         old_df = self.model.df
+        if df is None:
+            df = old_df
         if change_happened:
             self.model.df = df
 
