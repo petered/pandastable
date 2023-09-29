@@ -92,6 +92,7 @@ class Table(Canvas):
                      on_select_callback: Optional[Callable[[int, int, pd.DataFrame], None]] = None,
                      # Called whenever a new row/col is selected.  Note, to get multiselect indices, you'd call
                      enable_menus=True,
+                     enable_horizontal_scroll=True,
                      **kwargs):
 
         Canvas.__init__(self, parent, bg='white',
@@ -139,6 +140,7 @@ class Table(Canvas):
         self.setFont()
         self._show_row_headers = show_row_headers
         self._show_col_headers = show_col_headers
+        self._enable_horizonal_scroll = enable_horizontal_scroll
 
         # set any options passed in kwargs to overwrite defaults and prefs
         for key in kwargs:
@@ -242,20 +244,33 @@ class Table(Canvas):
     def mouse_wheel(self, event):
         """Handle mouse wheel scroll for windows"""
 
+        is_horizontal = event.state & 0x1
+        if is_horizontal and not self._enable_horizonal_scroll:
+            return
+
         if event.num == 5 or event.delta == -120:
             event.widget.yview_scroll(1, UNITS)
             if self.rowheader is not None:
-                self.rowheader.yview_scroll(1, UNITS)
+                if is_horizontal:
+                    self.rowheader.xview_scroll(1, UNITS)
+                else:
+                    self.rowheader.yview_scroll(1, UNITS)
         if event.num == 4 or event.delta == 120:
             if self.canvasy(0) < 0:
                 return
-            event.widget.yview_scroll(-1, UNITS)
-            if self.rowheader is not None:
-                self.rowheader.yview_scroll(-1, UNITS)
+            if is_horizontal:
+                event.widget.xview_scroll(-1, UNITS)
+            else:
+                event.widget.yview_scroll(-1, UNITS)
+                if self.rowheader is not None:
+                    self.rowheader.yview_scroll(-1, UNITS)
         if sys.platform == 'darwin':
             # if self.rowheader is not None and self.rowheader.yview_scroll is not None:
             #     self.rowheader.yview_scroll(event.delta, UNITS)
-            event.widget.yview_scroll(-event.delta, UNITS)
+            if is_horizontal:
+                event.widget.xview_scroll(-event.delta, UNITS)
+            else:
+                event.widget.yview_scroll(-event.delta, UNITS)
 
         self.redrawVisible()
         return
@@ -1235,11 +1250,13 @@ class Table(Canvas):
         self.deleteCells(rows, cols)
         return
 
-    def clearTable(self):
+    def clearTable(self, ask: bool = False):
         """Make an empty table"""
+
         n = messagebox.askyesno("Clear Confirm",
                                 "This will clear the entire table.\nAre you sure?",
-                                parent=self.parentframe)
+                                parent=self.parentframe) if ask else True
+
         if not n:
             return
         self.storeCurrent()
@@ -2146,7 +2163,7 @@ class Table(Canvas):
         """Get currently selected row"""
         return min(self.currentrow, len(self.model.df)-1)
 
-    def get_selected_row_index(self) -> Optional[int]:
+    def get_selected_row_index(self) -> Optional[Hashable]:
         df = self.get_df()
         return df.index[self.getSelectedRow()] if len(df)>0 else None
 
@@ -3400,7 +3417,7 @@ class Table(Canvas):
 
         return
 
-    def update_df(self, df: Optional[pd.DataFrame] = None, show_now: Optional[bool] = None):
+    def update_df(self, df: Optional[pd.DataFrame] = None, show_now: Optional[bool] = None, auto_resize_columns: bool = None):
         """ Update the dataframe
         If you have just edited the dataframe inplace, you don't need to pass it in.
         """
@@ -3410,6 +3427,12 @@ class Table(Canvas):
             df = old_df
         if change_happened:
             self.model.df = df
+
+        if auto_resize_columns is None:
+            auto_resize_columns = self.model.df is None
+
+        if auto_resize_columns:
+            self.autoResizeColumns()
 
         if show_now or (show_now is None and change_happened):
             if df.index.equals(old_df.index) and df.columns.equals(old_df.columns):
