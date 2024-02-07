@@ -81,6 +81,7 @@ class Table(Canvas):
                      rows=20,
                      cols=5,
                      column_width_fudge_factor: float = 1.0,
+                     theme: Optional['str'] = None,
                      showtoolbar=False,
                      showstatusbar=False,
                      show_row_headers = True,
@@ -90,6 +91,7 @@ class Table(Canvas):
                      editable=True,
                      editable_columns: Optional[Sequence[Union[int, str]]] = None,
                      on_select_callback: Optional[Callable[[int, int, pd.DataFrame], None]] = None,
+                     on_double_click_callback: Optional[Callable[[int, int, pd.DataFrame], None]] = None,
                      # Called whenever a new row/col is selected.  Note, to get multiselect indices, you'd call
                      enable_menus=True,
                      enable_horizontal_scroll=True,
@@ -130,6 +132,7 @@ class Table(Canvas):
         self.editable = editable
         self.on_edit_callback = on_edit_callback
         self.on_select_callback = on_select_callback
+        self.on_double_click_callback = on_double_click_callback
         self.enable_menus = enable_menus
         self.filtered = False
         self.child = None
@@ -2167,12 +2170,12 @@ class Table(Canvas):
         df = self.get_df()
         return df.index[self.getSelectedRow()] if len(df)>0 else None
 
-    def set_selected_row_index(self, index: Hashable):
+    def set_selected_row_index(self, index: Hashable, trigger_callback: bool = True):
         df = self.get_df()
         if len(df)==0:
             return
         new_row = df.index.get_loc(index)
-        self._indicate_selected_rowcol(new_row, self.currentcol)
+        self._indicate_selected_rowcol(new_row, self.currentcol, trigger_callback=trigger_callback)
         # self.setSelectedRow(df.index.get_loc(index))
         # self.on_select_callback(self.currentrow, self.currentcol, self.get_df())
 
@@ -2327,14 +2330,14 @@ class Table(Canvas):
             self.cellentry.destroy()
         return
 
-    def _indicate_selected_rowcol(self, row, col):
+    def _indicate_selected_rowcol(self, row, col, trigger_callback: bool = True):
         self.setSelectedRow(row)
         self.setSelectedCol(col)
         self.drawSelectedRect(self.currentrow, self.currentcol)
         self.drawSelectedRow()
         self.rowheader.drawSelectedRows(row)
         self.colheader.delete('rect')
-        if self.on_select_callback is not None:
+        if self.on_select_callback is not None and trigger_callback:
             self.on_select_callback(row, col, self.get_df())
 
     #     """Indicate a cell is selected"""
@@ -2502,6 +2505,8 @@ class Table(Canvas):
         row = self.get_row_clicked(event)
         col = self.get_col_clicked(event)
         self.drawCellEntry(self.currentrow, self.currentcol)
+        if self.on_double_click_callback is not None:
+            self.on_double_click_callback(row, col, self.get_df())
         return
 
     def handle_right_click(self, event):
